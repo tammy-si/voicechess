@@ -154,47 +154,53 @@ class BoardView:
                 bottom_left_x = top_left_x
                 bottom_left_y = int((top_left_y) + (7 * height_of_square))
                 # y before x here because it rows (vertical) then columns (horizontal)
-                bottom_left_square = img_gray[top_left_y:bottom_left_y+height_of_square, bottom_left_x:bottom_left_x + (width_of_square // 4)]
-                _, bottom_left_square_bin = cv2.threshold(bottom_left_square, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-                bottom_left_square_resized = cv2.resize(bottom_left_square_bin, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
-                mean_intensity = np.mean(bottom_left_square_resized)
+                try: 
+                    bottom_left_square = img_gray[top_left_y:bottom_left_y+height_of_square, bottom_left_x:bottom_left_x + (width_of_square // 4)]
+                    _, bottom_left_square_bin = cv2.threshold(bottom_left_square, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                    bottom_left_square_resized = cv2.resize(bottom_left_square_bin, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+                    mean_intensity = np.mean(bottom_left_square_resized)
 
-                # Invert colors if the image is mostly dark
-                if mean_intensity < 127:  # Adjust threshold if needed
-                    bottom_left_square_resized = cv2.bitwise_not(bottom_left_square_resized)
-                #cv2.imwrite("bottomleft.png", bottom_left_square_resized)
-                pytesseract.pytesseract.tesseract_cmd=os.path.normpath(os.getenv("TESSERACT_PATH"))
-                text = pytesseract.image_to_string(bottom_left_square_resized,config='--psm 6 -c tessedit_char_whitelist=0123456789')
-                if len(text) == 0:
-                    print("can't determine color")
-                else:
-                    ranks = text.split()
-                    if is_mostly_ascending(ranks):
-                        self.orientation = "black"
+                    # Invert colors if the image is mostly dark
+                    if mean_intensity < 127:  # Adjust threshold if needed
+                        bottom_left_square_resized = cv2.bitwise_not(bottom_left_square_resized)
+                    #cv2.imwrite("bottomleft.png", bottom_left_square_resized)
+                    pytesseract.pytesseract.tesseract_cmd=os.path.normpath(os.getenv("TESSERACT_PATH"))
+                    text = pytesseract.image_to_string(bottom_left_square_resized,config='--psm 6 -c tessedit_char_whitelist=0123456789')
+                    if len(text) == 0:
+                        print("can't determine color")
                     else:
-                        self.orientation = "white"
+                        ranks = text.split()
+                        if is_mostly_ascending(ranks):
+                            self.orientation = "black"
+                        else:
+                            self.orientation = "white"
+                except:
+                    print("Error determining color user is playing")
 
             # this part determines the pieces
             # loop through the board image and then predict in each square. store reuslt in board
             for row in range(8):
                 for col in range(8):
-                    square = img_gray[top_left_y + (row * height_of_square) : top_left_y + (row * height_of_square) + height_of_square, 
-                                    top_left_x + (col * width_of_square) : top_left_x + (col * width_of_square) + width_of_square]
-                    center_y = top_left_y + (row * height_of_square) + (height_of_square // 2)
-                    center_x = top_left_x + (col * width_of_square) + (width_of_square // 2)
-                    self.board_coords[row][col] = (int(center_x * scale_x), int(center_y * scale_y))
+                    try:
+                        square = img_gray[top_left_y + (row * height_of_square) : top_left_y + (row * height_of_square) + height_of_square, 
+                                        top_left_x + (col * width_of_square) : top_left_x + (col * width_of_square) + width_of_square]
+                        center_y = top_left_y + (row * height_of_square) + (height_of_square // 2)
+                        center_x = top_left_x + (col * width_of_square) + (width_of_square // 2)
+                        self.board_coords[row][col] = (int(center_x * scale_x), int(center_y * scale_y))
 
-                    image_tensor = piece_id_transform(square)
-                    # add a batch dimension
-                    image_tensor = image_tensor.unsqueeze(0)
-                    # now use the piece id model to figure out what it is
-                    with torch.no_grad():
-                        outputs = chess_piece_model(image_tensor)
+                        image_tensor = piece_id_transform(square)
+                        # add a batch dimension
+                        image_tensor = image_tensor.unsqueeze(0)
+                        # now use the piece id model to figure out what it is
+                        with torch.no_grad():
+                            outputs = chess_piece_model(image_tensor)
 
-                    _, predicted_class = torch.max(outputs, 1)
-                    classes = ['b', 'k', 'n', 'p', 'q', 'r', '.', 'B', 'K', 'N', 'P', 'Q', 'R']
-                    piece_prediction = classes[predicted_class.item()]
-                    self.board[row][col] = piece_prediction
+                        _, predicted_class = torch.max(outputs, 1)
+                        classes = ['b', 'k', 'n', 'p', 'q', 'r', '.', 'B', 'K', 'N', 'P', 'Q', 'R']
+                        piece_prediction = classes[predicted_class.item()]
+                        self.board[row][col] = piece_prediction
+                    except:
+                        print("error predicting piece at a square")
 
             # turn the board into FEN
             fen_list = []
